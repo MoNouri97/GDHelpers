@@ -19,11 +19,8 @@ jobs:
         with:
           dotnet-version: "9.0.x"
 
-      - name: Restore
-        run: dotnet restore
-
       - name: Pack
-        run: dotnet pack -c Release --no-restore
+        run: dotnet pack -c Release
 
       - name: Push to NuGet
         run: |
