@@ -1,0 +1,77 @@
+# GDHelpers
+
+Extension methods and attributes for Godot 4 C# projects.
+
+## Installation
+
+```
+dotnet add package GDHelpers
+```
+
+## Usage
+
+### Attributes
+
+Call `WireOnReady()` in your node's `_Ready()` to auto-wire fields and properties:
+
+```csharp
+using Godot;
+using GDHelpers;
+
+public partial class MyNode : Node
+{
+    [OnReady("MyChildNode")]
+    private Node _child;
+
+    [Autoload("GameManager")]
+    private GameManager _manager;
+
+    [Preload("res://Scenes/Enemy.tscn")]
+    private PackedScene _enemyScene;
+
+    public override void _Ready()
+    {
+        this.WireOnReady();
+        // _child, _manager, and _enemyScene are now set
+    }
+}
+```
+
+| Attribute                 | Description                                                                                                             |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `[OnReady("path")]`       | Wires a child node by path (falls back to unique name `%Name` if not found). If no path is given, uses the member name. |
+| `[Autoload("name")]`      | Wires an autoload by name from `/root/Name`. If no name is given, uses the member name.                                 |
+| `[Preload("res://path")]` | Loads a `PackedScene` from the given resource path at runtime.                                                          |
+
+### Node Extensions
+
+```csharp
+// Remove all children (optionally exclude some, optionally free them)
+node.RemoveChildren(free: true);
+node.RemoveChildren(except: new[] { keepThisNode });
+
+// Move all children to the scene root
+node.MoveChildrenToRoot();
+```
+
+### Debug Logger
+
+Colored logging via extension methods on `GodotObject`:
+
+```csharp
+this.Log("something happened");
+this.LogGreen("success");
+this.LogYellow("warning");
+this.LogRed("error");
+this.LogGray("info");
+```
+
+Set `logDisabled = true` on your node to suppress logs (red logs are always shown).
+
+## Acknowledgments
+
+Partly inspired by [GodotUtilities](https://github.com/firebelley/GodotUtilities).
+
+## License
+
+MIT
