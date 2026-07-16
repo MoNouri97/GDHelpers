@@ -1,0 +1,15 @@
+<Project Sdk="Godot.NET.Sdk/4.7.0">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <PackageId>GDHelpers</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>MoNouri97</Authors>
+    <Description>Extension methods and attributes for Godot 4 C# projects</Description>
+    <PackageTags>godot;godot4;extensions</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MoNouri97/GDHelpers</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MoNouri97/GDHelpers</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+  </PropertyGroup>
+</Project>
