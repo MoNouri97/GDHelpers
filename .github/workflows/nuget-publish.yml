@@ -19,8 +19,11 @@ jobs:
         with:
           dotnet-version: "9.0.x"
 
+      - name: Build
+        run: dotnet build -c Release
+
       - name: Pack
-        run: dotnet pack -c Release
+        run: dotnet pack -c Release --no-build
 
       - name: Push to NuGet
         run: |
