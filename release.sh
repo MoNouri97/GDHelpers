@@ -10,6 +10,6 @@ fi
 VERSION="$1"
 
 git tag "v$VERSION"
-git push origin main --tags
+git push origin master --tags
 
 echo "Tagged v$VERSION — workflow will publish to NuGet."
