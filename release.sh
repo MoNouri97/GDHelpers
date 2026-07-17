@@ -9,8 +9,6 @@ fi
 
 VERSION="$1"
 
-git add -A
-git commit -m "v$VERSION"
 git tag "v$VERSION"
 git push origin main --tags
 
