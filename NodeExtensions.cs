@@ -188,6 +188,12 @@ namespace GDHelpers
         private static Node GetFromName(Node instance, string nodePath)
         {
             Node node = instance.GetNodeOrNull(nodePath) ?? instance.GetNodeOrNull($"%{nodePath}");
+            if (node == null && nodePath.Length > 0)
+            {
+                char first = nodePath[0];
+                string toggled = (char.IsUpper(first) ? char.ToLower(first) : char.ToUpper(first)) + nodePath[1..];
+                node = instance.GetNodeOrNull(toggled) ?? instance.GetNodeOrNull($"%{toggled}");
+            }
             if (node == null)
             {
                 instance.LogYellow("failed to wire node: " + nodePath);
