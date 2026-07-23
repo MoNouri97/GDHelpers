@@ -14,6 +14,24 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="GDHelpers.SourceGenerator\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="GDHelpers.SourceGenerator\GDHelpers.SourceGenerator.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="GDHelpers.SourceGenerator\bin\$(Configuration)\netstandard2.0\GDHelpers.SourceGenerator.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
   </ItemGroup>
 </Project>

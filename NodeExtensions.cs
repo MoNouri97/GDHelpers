@@ -39,7 +39,9 @@ namespace GDHelpers
             }
         }
 
-        // Initializes fields in a Node instance that are marked with the OnReadyAttribute.
+        [System.Obsolete(
+            "Use [OnReady] source generator instead. Remove the WireOnReady() call — the generator automatically provides _Ready()."
+        )]
         public static void WireOnReady(this Node instance)
         {
             // Get all instance fields of the node that are non-public (like private or protected).
@@ -191,7 +193,9 @@ namespace GDHelpers
             if (node == null && nodePath.Length > 0)
             {
                 char first = nodePath[0];
-                string toggled = (char.IsUpper(first) ? char.ToLower(first) : char.ToUpper(first)) + nodePath[1..];
+                string toggled =
+                    (char.IsUpper(first) ? char.ToLower(first) : char.ToUpper(first))
+                    + nodePath[1..];
                 node = instance.GetNodeOrNull(toggled) ?? instance.GetNodeOrNull($"%{toggled}");
             }
             if (node == null)

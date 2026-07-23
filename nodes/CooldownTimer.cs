@@ -13,8 +13,6 @@ public partial class CooldownTimer : Node
 
     private Tween tween;
 
-    public override void _Ready() { }
-
     public void StopCooldown()
     {
         if (tween != null && tween.IsRunning())
@@ -36,15 +34,5 @@ public partial class CooldownTimer : Node
         tween
             .TweenMethod(Callable.From((float v) => Value = v), Value, MaxValue, time)
             .SetDelay(delay);
-    }
-
-    public override void _Process(double delta) { }
-
-    public override void _Notification(int what)
-    {
-        if (what == NotificationEnterTree)
-        {
-            this.WireOnReady();
-        }
     }
 }

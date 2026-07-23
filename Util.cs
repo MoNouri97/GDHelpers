@@ -515,7 +515,7 @@ namespace GDHelpers
         public static Tween AnimateOut(
             this Control node,
             bool hide = true,
-            double duration =  .2,
+            double duration = .2,
             Tween.EaseType EaseType = Tween.EaseType.Out,
             Tween.TransitionType TransType = Tween.TransitionType.Spring
         )
