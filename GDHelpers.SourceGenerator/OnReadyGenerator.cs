@@ -199,11 +199,11 @@ namespace GDHelpers.SourceGenerator
                     continue;
 
                 var args = attr.ConstructorArguments;
-                if (args.Length >= 2)
+                if (args.Length >= 1)
                 {
                     if (args[0].Value is string s)
                         signalName = s;
-                    if (args[1].Value is string p)
+                    if (args.Length >= 2 && args[1].Value is string p)
                         nodePath = p;
                     if (args.Length >= 3 && args[2].Value is uint f)
                         flags = f;
@@ -475,15 +475,17 @@ namespace GDHelpers.SourceGenerator
             sb.AppendLine($"{indent}{{");
             foreach (var s in signals)
             {
-                var escapedPath = EscapeString(s.NodePath);
                 var escapedSignal = EscapeString(s.SignalName);
+                var target = string.IsNullOrEmpty(s.NodePath)
+                    ? "this"
+                    : $"GetNode<Node>(\"{EscapeString(s.NodePath)}\")";
                 if (s.Flags == 0)
                     sb.AppendLine(
-                        $"{indent}    GetNode<Node>(\"{escapedPath}\").Connect(\"{escapedSignal}\", new Callable(this, nameof({s.MethodName})));"
+                        $"{indent}    {target}.Connect(\"{escapedSignal}\", new Callable(this, nameof({s.MethodName})));"
                     );
                 else
                     sb.AppendLine(
-                        $"{indent}    GetNode<Node>(\"{escapedPath}\").Connect(\"{escapedSignal}\", new Callable(this, nameof({s.MethodName})), {s.Flags});"
+                        $"{indent}    {target}.Connect(\"{escapedSignal}\", new Callable(this, nameof({s.MethodName})), {s.Flags});"
                     );
             }
             sb.AppendLine($"{indent}}}");

@@ -7,7 +7,7 @@ namespace GDHelpers
         public string NodePath { get; }
         public uint Flags { get; }
 
-        public OnSignalAttribute(string signal, string nodePath, uint flags = 0)
+        public OnSignalAttribute(string signal, string nodePath = null, uint flags = 0)
         {
             Signal = signal;
             NodePath = nodePath;
