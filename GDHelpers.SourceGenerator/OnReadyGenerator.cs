@@ -133,7 +133,7 @@ namespace GDHelpers.SourceGenerator
                 return null;
 
             var hasReady = containingType
-                .GetMembers("_Ready")
+                .GetMembers("_Notification")
                 .Any(m => m is IMethodSymbol { IsOverride: true });
 
             var nsSymbol = containingType.ContainingNamespace;
@@ -228,7 +228,7 @@ namespace GDHelpers.SourceGenerator
                 return null;
 
             var hasReady = containingType
-                .GetMembers("_Ready")
+                .GetMembers("_Notification")
                 .Any(m => m is IMethodSymbol { IsOverride: true });
 
             var nsSymbol = containingType.ContainingNamespace;
@@ -351,11 +351,14 @@ namespace GDHelpers.SourceGenerator
             }
             else
             {
-                sb.AppendLine($"{indent}public override void _Ready()");
+                sb.AppendLine($"{indent}public override void _Notification(int what)");
                 sb.AppendLine($"{indent}{{");
+                sb.AppendLine($"{indent}    if (what == NotificationEnterTree)");
+                sb.AppendLine($"{indent}    {{");
                 if (members.Count > 0 || signals.Count > 0)
-                    sb.AppendLine($"{indent}    WireNodes();");
-                sb.AppendLine($"{indent}    OnReady();");
+                    sb.AppendLine($"{indent}        WireNodes();");
+                sb.AppendLine($"{indent}        OnReady();");
+                sb.AppendLine($"{indent}    }}");
                 sb.AppendLine($"{indent}}}");
                 sb.AppendLine();
                 sb.AppendLine($"{indent}partial void OnReady();");
