@@ -14,6 +14,7 @@ namespace GDHelpers.SourceGenerator
         private const string OnReadyAttr = "GDHelpers.OnReadyAttribute";
         private const string AutoloadAttr = "GDHelpers.AutoloadAttribute";
         private const string PreloadAttr = "GDHelpers.PreloadAttribute";
+        private const string OnSignalAttr = "GDHelpers.OnSignalAttribute";
 
         private static readonly SymbolDisplayFormat TypeFormat = new(
             typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces
@@ -31,9 +32,20 @@ namespace GDHelpers.SourceGenerator
 
             var allMembers = members.Collect();
 
+            var signalTargets = context
+                .SyntaxProvider.CreateSyntaxProvider(
+                    predicate: static (node, _) => IsSignalCandidate(node),
+                    transform: static (ctx, token) => GetSignalTarget(ctx, token)
+                )
+                .Where(static s => s is not null)
+                .Select(static (s, _) => s!.Value);
+
+            var allSignals = signalTargets.Collect();
+
             context.RegisterSourceOutput(
-                context.CompilationProvider.Combine(allMembers),
-                static (spc, source) => Execute(spc, source.Left, source.Right)
+                context.CompilationProvider.Combine(allMembers).Combine(allSignals),
+                static (spc, source) =>
+                    Execute(spc, source.Left.Left, source.Left.Right, source.Right)
             );
         }
 
@@ -152,29 +164,124 @@ namespace GDHelpers.SourceGenerator
             );
         }
 
+        private static bool IsSignalCandidate(SyntaxNode node)
+        {
+            return node is MethodDeclarationSyntax { AttributeLists.Count: > 0 };
+        }
+
+        private static SignalTarget? GetSignalTarget(
+            GeneratorSyntaxContext context,
+            CancellationToken token
+        )
+        {
+            if (context.Node is not MethodDeclarationSyntax mds)
+                return null;
+
+            var methodSymbol = context.SemanticModel.GetDeclaredSymbol(mds, token);
+            if (
+                methodSymbol == null
+                || methodSymbol.IsStatic
+                || methodSymbol.MethodKind != MethodKind.Ordinary
+            )
+                return null;
+
+            string? signalName = null;
+            string? nodePath = null;
+            uint flags = 0;
+            bool found = false;
+
+            foreach (var attr in methodSymbol.GetAttributes())
+            {
+                var attrClass = attr.AttributeClass;
+                if (attrClass == null)
+                    continue;
+                if (attrClass.ToDisplayString() != OnSignalAttr)
+                    continue;
+
+                var args = attr.ConstructorArguments;
+                if (args.Length >= 2)
+                {
+                    if (args[0].Value is string s)
+                        signalName = s;
+                    if (args[1].Value is string p)
+                        nodePath = p;
+                    if (args.Length >= 3 && args[2].Value is uint f)
+                        flags = f;
+                    found = true;
+                }
+                break;
+            }
+
+            if (!found)
+                return null;
+
+            var containingType = methodSymbol.ContainingType;
+            if (containingType == null || containingType.TypeKind != TypeKind.Class)
+                return null;
+
+            var isPartial = containingType.DeclaringSyntaxReferences.Any(r =>
+                r.GetSyntax(token) is ClassDeclarationSyntax cls
+                && cls.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword))
+            );
+
+            if (!isPartial)
+                return null;
+
+            var hasReady = containingType
+                .GetMembers("_Ready")
+                .Any(m => m is IMethodSymbol { IsOverride: true });
+
+            var nsSymbol = containingType.ContainingNamespace;
+            var ns = nsSymbol is { IsGlobalNamespace: false } ? nsSymbol.ToDisplayString() : "";
+            var fullTypeName = containingType.ToDisplayString(TypeFormat);
+
+            var className = fullTypeName;
+            if (!string.IsNullOrEmpty(ns) && fullTypeName.StartsWith(ns + "."))
+                className = fullTypeName.Substring(ns.Length + 1);
+
+            return new SignalTarget(
+                ns,
+                className,
+                methodSymbol.Name,
+                signalName ?? "",
+                nodePath ?? "",
+                flags,
+                hasReady
+            );
+        }
+
         private static void Execute(
             SourceProductionContext context,
             Compilation compilation,
-            ImmutableArray<MemberTarget> members
+            ImmutableArray<MemberTarget> members,
+            ImmutableArray<SignalTarget> signals
         )
         {
-            if (members.IsEmpty)
+            if (members.IsEmpty && signals.IsEmpty)
                 return;
 
-            var groups = members.GroupBy(m => (m.Namespace, m.ClassName));
+            var memberGroups = members.GroupBy(m => (m.Namespace, m.ClassName));
+            var signalGroups = signals.GroupBy(s => (s.Namespace, s.ClassName));
+            var allKeys = memberGroups.Select(g => g.Key).Union(signalGroups.Select(g => g.Key));
 
-            foreach (var group in groups)
+            foreach (var key in allKeys)
             {
-                var list = group.ToList();
-                if (list.Count == 0)
-                    continue;
+                var memberList =
+                    memberGroups.FirstOrDefault(g => g.Key == key)?.ToList()
+                    ?? new List<MemberTarget>();
 
-                var hasReady = list[0].HasReadyOverride;
-                var source = GenerateSource(list, hasReady);
-                var nsPrefix = string.IsNullOrEmpty(group.Key.Namespace)
-                    ? ""
-                    : group.Key.Namespace + ".";
-                var hintName = SanitizeHintName($"{nsPrefix}{group.Key.ClassName}.OnReady.g.cs");
+                var signalList =
+                    signalGroups.FirstOrDefault(g => g.Key == key)?.ToList()
+                    ?? new List<SignalTarget>();
+
+                bool hasReady =
+                    memberList.Count > 0
+                        ? memberList[0].HasReadyOverride
+                        : signalList[0].HasReadyOverride;
+
+                var source = GenerateSource(memberList, signalList, hasReady);
+                var nsPrefix = string.IsNullOrEmpty(key.Namespace) ? "" : key.Namespace + ".";
+                var hintName = SanitizeHintName($"{nsPrefix}{key.ClassName}.OnReady.g.cs");
                 context.AddSource(hintName, source);
             }
         }
@@ -192,7 +299,11 @@ namespace GDHelpers.SourceGenerator
             return sb.ToString();
         }
 
-        private static string GenerateSource(List<MemberTarget> members, bool hasReadyOverride)
+        private static string GenerateSource(
+            List<MemberTarget> members,
+            List<SignalTarget> signals,
+            bool hasReadyOverride
+        )
         {
             var sb = new StringBuilder();
             sb.AppendLine("// <auto-generated/>");
@@ -204,9 +315,20 @@ namespace GDHelpers.SourceGenerator
             sb.AppendLine("using Godot;");
             sb.AppendLine();
 
-            var first = members[0];
-            var ns = first.Namespace;
-            var classParts = first.ClassName.Split('.');
+            string ns;
+            string fullClassName;
+            if (members.Count > 0)
+            {
+                ns = members[0].Namespace;
+                fullClassName = members[0].ClassName;
+            }
+            else
+            {
+                ns = signals[0].Namespace;
+                fullClassName = signals[0].ClassName;
+            }
+
+            var classParts = fullClassName.Split('.');
 
             if (!string.IsNullOrEmpty(ns))
             {
@@ -224,23 +346,36 @@ namespace GDHelpers.SourceGenerator
 
             if (hasReadyOverride)
             {
-                AppendWireNodes(sb, indent, members);
+                if (members.Count > 0 || signals.Count > 0)
+                    AppendWireNodes(sb, indent, members, signals);
             }
             else
             {
                 sb.AppendLine($"{indent}public override void _Ready()");
                 sb.AppendLine($"{indent}{{");
-                AppendAssignments(sb, indent + "    ", members);
+                if (members.Count > 0 || signals.Count > 0)
+                    sb.AppendLine($"{indent}    WireNodes();");
                 sb.AppendLine($"{indent}    OnReady();");
                 sb.AppendLine($"{indent}}}");
                 sb.AppendLine();
                 sb.AppendLine($"{indent}partial void OnReady();");
                 sb.AppendLine();
-                AppendWireNodes(sb, indent, members);
+
+                if (members.Count > 0 || signals.Count > 0)
+                    AppendWireNodes(sb, indent, members, signals);
             }
 
-            sb.AppendLine();
-            AppendResolveHelper(sb, indent);
+            if (signals.Count > 0)
+            {
+                sb.AppendLine();
+                AppendWireSignals(sb, indent, signals);
+            }
+
+            if (members.Count > 0)
+            {
+                sb.AppendLine();
+                AppendResolveHelper(sb, indent);
+            }
 
             for (int i = 0; i < classParts.Length; i++)
             {
@@ -257,12 +392,15 @@ namespace GDHelpers.SourceGenerator
         private static void AppendWireNodes(
             StringBuilder sb,
             string indent,
-            List<MemberTarget> members
+            List<MemberTarget> members,
+            List<SignalTarget> signals
         )
         {
             sb.AppendLine($"{indent}private void WireNodes()");
             sb.AppendLine($"{indent}{{");
             AppendAssignments(sb, indent + "    ", members);
+            if (signals.Count > 0)
+                sb.AppendLine($"{indent}    WireSignals();");
             sb.AppendLine($"{indent}}}");
         }
 
@@ -327,8 +465,62 @@ namespace GDHelpers.SourceGenerator
             sb.AppendLine($"{indent}}}");
         }
 
+        private static void AppendWireSignals(
+            StringBuilder sb,
+            string indent,
+            List<SignalTarget> signals
+        )
+        {
+            sb.AppendLine($"{indent}private void WireSignals()");
+            sb.AppendLine($"{indent}{{");
+            foreach (var s in signals)
+            {
+                var escapedPath = EscapeString(s.NodePath);
+                var escapedSignal = EscapeString(s.SignalName);
+                if (s.Flags == 0)
+                    sb.AppendLine(
+                        $"{indent}    GetNode<Node>(\"{escapedPath}\").Connect(\"{escapedSignal}\", new Callable(this, nameof({s.MethodName})));"
+                    );
+                else
+                    sb.AppendLine(
+                        $"{indent}    GetNode<Node>(\"{escapedPath}\").Connect(\"{escapedSignal}\", new Callable(this, nameof({s.MethodName})), {s.Flags});"
+                    );
+            }
+            sb.AppendLine($"{indent}}}");
+        }
+
         private static string EscapeString(string s) =>
             s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+    }
+
+    internal readonly struct SignalTarget
+    {
+        public readonly string Namespace;
+        public readonly string ClassName;
+        public readonly string MethodName;
+        public readonly string SignalName;
+        public readonly string NodePath;
+        public readonly uint Flags;
+        public readonly bool HasReadyOverride;
+
+        public SignalTarget(
+            string @namespace,
+            string className,
+            string methodName,
+            string signalName,
+            string nodePath,
+            uint flags,
+            bool hasReadyOverride
+        )
+        {
+            Namespace = @namespace;
+            ClassName = className;
+            MethodName = methodName;
+            SignalName = signalName;
+            NodePath = nodePath;
+            Flags = flags;
+            HasReadyOverride = hasReadyOverride;
+        }
     }
 
     internal readonly struct MemberTarget
